@@ -2,6 +2,8 @@
 #include <linux/module.h> 
 #include <linux/pci.h>
 #include <linux/fs.h> 
+#include <asm/io.h>
+#include <linux/delay.h>
 
 MODULE_LICENSE("GPL"); 
 
@@ -19,8 +21,17 @@ MODULE_DEVICE_TABLE(pci,bctadc_ids);
 
 ssize_t bctadc_read (struct file *filp, char __user *buf, size_t count, loff_t *pos)
 {
+	unsigned int sample=0;
+	int tries=0;
 	printk(KERN_DEBUG "process %i (%s) going to read\n",
 			current->pid, current->comm);
+	outb(0,inputSelect); //channel 0, gain 0, non-differential; 
+	mdelay(5); //settle time
+	outb(4,conversionControl); // sw trigger
+	while(inb(conversionControl)&4) //is bit 2 clear?
+		tries++;
+	sample=inw(inputSample);
+	printk(KERN_DEBUG "Read %x . tries %x\n" , sample, tries);
 	return 0; /* EOF */
 }
 

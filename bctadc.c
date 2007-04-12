@@ -19,8 +19,12 @@ static struct pci_device_id bctadc_ids [] = {
 
 MODULE_DEVICE_TABLE(pci,bctadc_ids);
 
+
 ssize_t bctadc_read (struct file *filp, char __user *buf, size_t count, loff_t *pos)
 {
+	static int fim=0;
+	fim = !fim;
+	if(fim) {
 	unsigned int sample=0;
 	int tries=0;
 	printk(KERN_DEBUG "process %i (%s) going to read\n",
@@ -32,7 +36,10 @@ ssize_t bctadc_read (struct file *filp, char __user *buf, size_t count, loff_t *
 		tries++;
 	sample=inw(inputSample);
 	printk(KERN_DEBUG "Read %x . tries %x\n" , sample, tries);
-	return 0; /* EOF */
+	sprintf(buf,"Read: %x\n", sample);
+	return 10; /* EOF */
+	} else
+	return 0;
 }
 
 

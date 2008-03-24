@@ -27,8 +27,8 @@ ssize_t bctadc_read (struct file *filp, char __user *buf, size_t count, loff_t *
 	if(fim) {
 	unsigned int sample=0;
 	int tries=0;
-	printk(KERN_DEBUG "process %i (%s) going to read\n",
-			current->pid, current->comm);
+//	printk(KERN_DEBUG "process %i (%s) going to read\n",
+//			current->pid, current->comm);
 	outb(0,inputSelect); //channel 0, gain 0, non-differential; 
 	mdelay(5); //settle time
 	outb(4,conversionControl); // sw trigger
@@ -93,13 +93,13 @@ static struct pci_driver pci_driver = {
  
 static int hello_init(void) 
 { 
-    printk(KERN_ALERT "BTCADC Loaded\n"); 
+    printk(KERN_ALERT "BCTADC Loaded\n"); 
     return pci_register_driver(&pci_driver); 
 } 
 
 static void hello_exit(void) 
 { 
-    printk(KERN_ALERT "BTCADC removed\n"); 
+    printk(KERN_ALERT "BCTADC removed\n"); 
     pci_unregister_driver(&pci_driver);
 } 
 

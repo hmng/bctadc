@@ -4,6 +4,7 @@
 #include <linux/fs.h> 
 #include <asm/io.h>
 #include <asm/current.h>
+#include <asm/uaccess.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/sysfs.h>
@@ -26,24 +27,31 @@ MODULE_DEVICE_TABLE(pci,bctadc_ids);
 
 
 ssize_t bctadc_read (struct file *filp, char __user *buf, size_t count, loff_t *pos) {
-  static int fim=0;
-  fim = !fim;
-  if(fim) {
-    unsigned int sample=0;
+   if(*pos<31) {
+    unsigned int channel=0,sample=0;
     int tries=0;
-    printk(KERN_DEBUG "process %i (%s) going to read\n",
-	   current->pid, current->comm);
-    outb(0,inputSelect); //channel 0, gain 0, non-differential; 
+	char hex_sample[5];
+    printk(KERN_DEBUG "process %i (%s) going to read at offset %lu\n",
+	   current->pid, current->comm,*pos);
+	channel=*pos>>2; //every channel read takes 4 hex chars
+	
+    outb(channel << 4 ,inputSelect); //channel 0, gain 0, non-differential; 
     mdelay(5); //settle time
     outb(4,conversionControl); // sw trigger
     while(inb(conversionControl)&4) //is bit 2 clear?
       tries++;
     sample=inw(inputSample);
-    printk(KERN_DEBUG "Read %x . tries %x\n" , sample, tries);
-    sprintf(buf,"Read: %x\n", sample);
-    return 10; /* EOF */
+    printk(KERN_DEBUG "Read %04x . tries %x\n" , sample, tries);
+
+    sprintf(hex_sample,"%04x", sample);
+	copy_to_user(buf, hex_sample, 4); 
+
+	
+    // sprintf(buf,"Read: %x\n", sample);
+    *pos+=4;
+    return 4;
   } else
-    return 0; /* EOD */
+    return 0; /* EOF */
 }
 
 

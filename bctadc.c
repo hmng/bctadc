@@ -14,8 +14,8 @@ MODULE_LICENSE("GPL");
 
 static int bctadc_major = 0;
 
-//we need this 3 IOPORTS to read from the board:
-static unsigned long conversionControl,inputSelect,inputSample;
+//we need this 4 IOPORTS to read from the board:
+static unsigned long conversionControl,inputSelect,inputStatus,inputSample;
 
 
 static struct pci_device_id bctadc_ids [] = {
@@ -27,29 +27,46 @@ MODULE_DEVICE_TABLE(pci,bctadc_ids);
 
 
 ssize_t bctadc_read (struct file *filp, char __user *buf, size_t count, loff_t *pos) {
-   if(*pos<31) {
-    unsigned int channel=0,sample=0;
-    int tries=0;
-	char hex_sample[5];
-    printk(KERN_DEBUG "process %i (%s) going to read at offset %lu\n",
-	   current->pid, current->comm,*pos);
-	channel=*pos>>2; //every channel read takes 4 hex chars
-	
-    outb(channel << 4 ,inputSelect); //channel 0, gain 0, non-differential; 
-    mdelay(5); //settle time
+  if(*pos<31) {
+    unsigned short channel=0,sample=0;
+    int tries=30;
+    char hex_sample[5];
+    channel=(*pos) >> 2; //every channel read takes 4 hex chars
+    /*
+     * printk(KERN_DEBUG "process %i (%s) going to read at offset %llu channel %u\n",
+     *   current->pid, current->comm,*pos,channel);
+     */
+    outb(0,conversionControl); // reset
+    outb((channel << 4) +1 ,inputSelect); //channel, gain 1, differential; 
+    mdelay(2);  /* mux settling time is 37 us for unitary gain, use safer time */
     outb(4,conversionControl); // sw trigger
-    while(inb(conversionControl)&4) //is bit 2 clear?
-      tries++;
-    sample=inw(inputSample);
-    printk(KERN_DEBUG "Read %04x . tries %x\n" , sample, tries);
-
-    sprintf(hex_sample,"%04x", sample);
-	copy_to_user(buf, hex_sample, 4); 
-
+    while(tries-- && inb(inputStatus)& 1) //is bit 0 clear?
+      ;
+    if(tries) {
+      /* ignore first sample following board manual    *
+       * not sure if there's a need to actualy read it *
+       * better do it any way */
+      sample=inw(inputSample);
+      
+      //printk(KERN_DEBUG "Read at pos %llu value %04x with tries %x\n" , *pos,sample, tries);
+       
+      outb(4,conversionControl); // sw trigger
+      while(tries-- && inb(inputStatus)& 1) //is bit 0 clear?
+	;
+      if(tries) {
+	sample=inw(inputSample);
+	/* clear 4 MSBs with channel number */
+	sample &= 0x0fff;
 	
-    // sprintf(buf,"Read: %x\n", sample);
-    *pos+=4;
-    return 4;
+	//printk(KERN_DEBUG "Read %04x . tries %x d: %hd\n" , sample, tries,sample & 0xfff);
+	
+	sprintf(hex_sample,"%04x", sample);
+	copy_to_user(buf, hex_sample, 4);
+	*pos+=4;
+	return 4;
+      }
+    }
+    return -EIO; /* ADC busy for 'tries' times... */
   } else
     return 0; /* EOF */
 }
@@ -80,7 +97,7 @@ static struct miscdevice bctadc_dev = {
 
 int probe (struct pci_dev *dev, const struct pci_device_id *id) {
   /* called by the kernel when the pci device is found */
-	
+  
   int ret;
   unsigned long bar;
   printk( KERN_ALERT "BCTADC: Probed!!\n");
@@ -90,6 +107,7 @@ int probe (struct pci_dev *dev, const struct pci_device_id *id) {
     bar=pci_resource_start(dev, 2);
     conversionControl = bar +0xC;
     inputSelect = bar + 0xD;
+    inputStatus = bar + 0xE;
     inputSample = pci_resource_start(dev,3); // +0x0
 		
 
